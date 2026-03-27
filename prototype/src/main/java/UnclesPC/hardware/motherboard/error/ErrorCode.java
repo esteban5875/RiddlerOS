@@ -11,7 +11,9 @@ public enum ErrorCode {
     DISK_NOT_FOUND(0x07),
     DISK_IMAGE_ERROR(0x08),
     SECTOR_SIZE_ERROR(0x09),
-    DISK_ERROR(0x0A);
+    OCCUPIED_DISK_ERROR(0x0A),
+    INVALID_DISK_COMMAND(0x0B),
+    SECTOR_COUNT_ERROR(0x0C);
 
     private final int code;
 

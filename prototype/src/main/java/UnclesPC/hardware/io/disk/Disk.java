@@ -9,47 +9,37 @@ import java.util.Map;
 
 import UnclesPC.hardware.motherboard.error.ErrorCode;
 import UnclesPC.hardware.motherboard.error.MyIBMGameException;
+import UnclesPC.hardware.ram.Memory;
+import UnclesPC.hardware.io.disk.DiskRegisters;
+import UnclesPC.hardware.io.exception.VirtualHardwareException;
+import UnclesPC.hardware.ram.modules.MemoryMap;
 
 public final class Disk implements AutoCloseable {
-    public static final int SECTOR_SIZE = 512;
-    public static final long DISK_SIZE = 5L * 1024L * 1024L * 1024L;
-    public static final long NUM_SECTORS = DISK_SIZE / SECTOR_SIZE;
+    private final int SECTOR_SIZE = 512;
+    private final long DISK_SIZE = 5L * 1024L * 1024L * 1024L;
+    private final long NUM_SECTORS = DISK_SIZE / SECTOR_SIZE;
+    private final int MAX_SECTOR_READ = 128;
 
     private final Path imagePath;
-    private final long diskSize;
-    private final int sectorSize;
     private RandomAccessFile file;
-    private boolean dirty;
+    private final Memory memory;
 
     public Disk() {
-        this("disk.img", DISK_SIZE, SECTOR_SIZE);
-    }
 
-    public Disk(String imagePath, long diskSize, int sectorSize) {
-        if (sectorSize <= 0) {
-            throw new MyIBMGameException(ErrorCode.SECTOR_SIZE_ERROR, "sector size must be positive");
-        }
-        if (diskSize <= 0 || diskSize % sectorSize != 0) {
-            throw new MyIBMGameException(ErrorCode.DISK_ERROR, "disk size must be a positive sector multiple");
-        }
-
-        this.imagePath = Path.of(imagePath);
-        this.diskSize = diskSize;
-        this.sectorSize = sectorSize;
-        this.file = null;
-        this.dirty = false;
+        this.memory = new Memory();
+        this.imagePath = Path.of("disk", "img", "disk.img");
     }
 
     public long size() {
-        return diskSize;
+        return DISK_SIZE;
     }
 
     public int sectorSize() {
-        return sectorSize;
+        return SECTOR_SIZE;
     }
 
     public long numSectors() {
-        return diskSize / sectorSize;
+        return DISK_SIZE / SECTOR_SIZE;
     }
 
     public boolean isOpen() {
@@ -68,7 +58,6 @@ public final class Disk implements AutoCloseable {
         info.put("num_sectors", numSectors());
         info.put("exists", exists());
         info.put("is_open", isOpen());
-        info.put("dirty", dirty);
         return info;
     }
 
@@ -83,7 +72,7 @@ public final class Disk implements AutoCloseable {
         }
 
         try (RandomAccessFile newFile = new RandomAccessFile(imagePath.toFile(), "rw")) {
-            newFile.setLength(diskSize);
+            initializeImageFile(newFile);
         }
     }
 
@@ -100,8 +89,7 @@ public final class Disk implements AutoCloseable {
         }
 
         file = new RandomAccessFile(imagePath.toFile(), "rw");
-        file.setLength(diskSize);
-        dirty = false;
+        file.setLength(DISK_SIZE);
         return this;
     }
 
@@ -115,7 +103,6 @@ public final class Disk implements AutoCloseable {
     public void flush() throws IOException {
         RandomAccessFile diskFile = requireOpen();
         diskFile.getFD().sync();
-        dirty = false;
     }
 
     @Override
@@ -129,35 +116,6 @@ public final class Disk implements AutoCloseable {
         file = null;
     }
 
-    public byte[] readSector(long sectorNumber) throws IOException {
-        validateSectorNumber(sectorNumber);
-        RandomAccessFile diskFile = requireOpen();
-        diskFile.seek(sectorNumber * sectorSize);
-        byte[] data = new byte[sectorSize];
-        int bytesRead = diskFile.read(data);
-        if (bytesRead < 0) {
-            return data;
-        }
-        if (bytesRead < sectorSize) {
-            for (int i = bytesRead; i < sectorSize; i++) {
-                data[i] = 0;
-            }
-        }
-        return data;
-    }
-
-    public void writeSector(long sectorNumber, byte[] data) throws IOException {
-        validateSectorNumber(sectorNumber);
-        if (data.length != sectorSize) {
-            throw new MyIBMGameException(ErrorCode.SECTOR_SIZE_ERROR, "sector write must match sector size");
-        }
-
-        RandomAccessFile diskFile = requireOpen();
-        diskFile.seek(sectorNumber * sectorSize);
-        diskFile.write(data);
-        dirty = true;
-    }
-
     private RandomAccessFile requireOpen() {
         if (!isOpen()) {
             throw new MyIBMGameException(ErrorCode.DISK_NOT_FOUND, "disk image is not open");
@@ -165,9 +123,180 @@ public final class Disk implements AutoCloseable {
         return file;
     }
 
-    private void validateSectorNumber(long sectorNumber) {
-        if (sectorNumber < 0 || sectorNumber >= numSectors()) {
-            throw new MyIBMGameException(ErrorCode.SECTOR_SIZE_ERROR, "sector number out of range");
+    private void initializeImageFile(RandomAccessFile diskFile) throws IOException {
+        // Reuse one zero-filled buffer so we can build the full disk image without
+        // allocating a multi-gigabyte byte array in memory.
+        byte[] emptyChunk = new byte[SECTOR_SIZE * MAX_SECTOR_READ];
+        long remainingBytes = DISK_SIZE;
+
+        diskFile.setLength(0);
+        diskFile.seek(0);
+
+        while (remainingBytes > 0) {
+            int bytesToWrite = (int) Math.min(emptyChunk.length, remainingBytes);
+            diskFile.write(emptyChunk, 0, bytesToWrite);
+            remainingBytes -= bytesToWrite;
+        }
+    }
+
+    public void executeCMD() {
+        boolean isOccupied = memory.read(DiskRegisters.STATUS.address) == 0x01 ? true : false;
+
+        if (isOccupied) {
+           
+
+        }
+        
+        memory.write(DiskRegisters.STATUS.address, 0x01);
+
+        try {
+            int command = memory.read(DiskRegisters.COMMAND.address);
+            switch (command) {
+                case 0x01:
+                    this.read();
+                    break;
+                case 0x02:
+                    this.write();
+                    break;
+                case 0x03:
+                    this.format();
+                    break;
+                default:
+                    throw new VirtualHardwareException(ErrorCode.INVALID_DISK_COMMAND.code());
+            }
+        } 
+        
+        catch (VirtualHardwareException e) {
+            if (e.getErrorCode() == ErrorCode.INVALID_DISK_COMMAND.code()){
+                memory.write(DiskRegisters.ERROR.address, ErrorCode.INVALID_DISK_COMMAND.code());
+            }
+
+
+        }
+    }
+
+    private void read() {
+        try {
+            int sectorCount = memory.read(DiskRegisters.SECTOR_COUNT.address);
+            int lba = memory.read(DiskRegisters.LBA.address);
+            int bufferPtr = memory.read(DiskRegisters.BUFFER_PTR.address);
+
+            if (sectorCount > MAX_SECTOR_READ) {
+                throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
+
+            }
+
+            if (lba < 0 || (long) lba + sectorCount > NUM_SECTORS) {
+                throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
+            }
+
+            int bytesToRead = sectorCount * SECTOR_SIZE;
+            long bufferEnd = (long) bufferPtr + bytesToRead - 1;
+            boolean inKernelHeap = bufferPtr >= MemoryMap.KERNEL_HEAP_START.value()
+                && bufferEnd <= MemoryMap.KERNEL_HEAP_END.value();
+            boolean inUserSpace = bufferPtr >= MemoryMap.USER_START.value()
+                && bufferEnd <= MemoryMap.USER_END.value();
+
+            if (!inKernelHeap && !inUserSpace) {
+                throw new VirtualHardwareException(ErrorCode.MEMORY_OUT_OF_BOUNDS.code());
+            }
+
+            RandomAccessFile diskFile = requireOpen();
+
+            for (int sector = 0; sector < sectorCount; sector++) {
+                long sectorOffset = (long) (lba + sector) * SECTOR_SIZE;
+                int memoryOffset = bufferPtr + (sector * SECTOR_SIZE);
+
+                diskFile.seek(sectorOffset);
+
+                for (int byteIndex = 0; byteIndex < SECTOR_SIZE; byteIndex++) {
+                    int value = diskFile.read();
+                    memory.write(memoryOffset + byteIndex, value < 0 ? 0 : value);
+                }
+            }
+
+        }
+        catch (IOException e) {
+            throw new MyIBMGameException(ErrorCode.DISK_IMAGE_ERROR, "unable to read disk image");
+        }
+        catch (VirtualHardwareException e) {
+            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
+        }
+    }   
+
+    private void write() {
+        try {
+            int sectorCount = memory.read(DiskRegisters.SECTOR_COUNT.address);
+            int lba = memory.read(DiskRegisters.LBA.address);
+            int bufferPtr = memory.read(DiskRegisters.BUFFER_PTR.address);
+
+            if (sectorCount > MAX_SECTOR_READ) {
+                throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
+            }
+
+            if (lba < 0 || (long) lba + sectorCount > NUM_SECTORS) {
+                throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
+            }
+
+            int bytesToWrite = sectorCount * SECTOR_SIZE;
+            long bufferEnd = (long) bufferPtr + bytesToWrite - 1;
+            boolean inKernelHeap = bufferPtr >= MemoryMap.KERNEL_HEAP_START.value()
+                && bufferEnd <= MemoryMap.KERNEL_HEAP_END.value();
+            boolean inUserSpace = bufferPtr >= MemoryMap.USER_START.value()
+                && bufferEnd <= MemoryMap.USER_END.value();
+
+            if (!inKernelHeap && !inUserSpace) {
+                throw new VirtualHardwareException(ErrorCode.MEMORY_OUT_OF_BOUNDS.code());
+            }
+
+            RandomAccessFile diskFile = requireOpen();
+
+            for (int sector = 0; sector < sectorCount; sector++) {
+                long sectorOffset = (long) (lba + sector) * SECTOR_SIZE;
+                int memoryOffset = bufferPtr + (sector * SECTOR_SIZE);
+
+                diskFile.seek(sectorOffset);
+
+                for (int byteIndex = 0; byteIndex < SECTOR_SIZE; byteIndex++) {
+                    diskFile.write(memory.read(memoryOffset + byteIndex));
+                }
+            }
+        }
+        catch (IOException e) {
+            throw new MyIBMGameException(ErrorCode.DISK_IMAGE_ERROR, "unable to write disk image");
+        }
+        catch (VirtualHardwareException e) {
+            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
+        }
+    }
+
+    private void format() {
+        try {
+            int sectorCount = memory.read(DiskRegisters.SECTOR_COUNT.address);
+            int lba = memory.read(DiskRegisters.LBA.address);
+
+            if (sectorCount > MAX_SECTOR_READ) {
+                throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
+            }
+
+            if (lba < 0 || (long) lba + sectorCount > NUM_SECTORS) {
+                throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
+            }
+
+            RandomAccessFile diskFile = requireOpen();
+            byte[] emptySector = new byte[SECTOR_SIZE];
+
+            for (int sector = 0; sector < sectorCount; sector++) {
+                long sectorOffset = (long) (lba + sector) * SECTOR_SIZE;
+                diskFile.seek(sectorOffset);
+                diskFile.write(emptySector);
+            }
+        }
+        catch (IOException e) {
+            throw new MyIBMGameException(ErrorCode.DISK_IMAGE_ERROR, "unable to format disk image");
+        }
+        catch (VirtualHardwareException e) {
+            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
         }
     }
 }
