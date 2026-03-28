@@ -1,6 +1,6 @@
 package UnclesPC.hardware.io.disk;
 
-public enum DiskRegisters {
+enum DiskRegisters {
 
     COMMAND(0x007F1000),
     STATUS(0x007F1004),

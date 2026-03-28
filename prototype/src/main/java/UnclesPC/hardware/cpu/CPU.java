@@ -3,6 +3,7 @@ package UnclesPC.hardware.cpu;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import UnclesPC.exception.UnclesPCException;
 import UnclesPC.hardware.cpu.modules.CPUData;
 import UnclesPC.hardware.cpu.modules.CPUState;
 import UnclesPC.hardware.cpu.modules.InstSet;
@@ -10,7 +11,6 @@ import UnclesPC.hardware.cpu.modules.Instruction;
 import UnclesPC.hardware.cpu.modules.OpcodeDescriptor;
 import UnclesPC.hardware.cpu.modules.OpcodeTable;
 import UnclesPC.hardware.motherboard.error.ErrorCode;
-import UnclesPC.hardware.motherboard.error.MyIBMGameException;
 import UnclesPC.hardware.ram.Memory;
 import UnclesPC.hardware.ram.modules.MemoryMap;
 import UnclesPC.hardware.ram.modules.VectorTable;
@@ -97,7 +97,7 @@ public final class CPU {
 
     public void executeALU(String op, int src, CPUData.InstMode mode, int dest) {
         if (!InstSet.ALU.containsKey(op)) {
-            throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "unknown ALU operation: " + op);
+            throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "unknown ALU operation: " + op);
         }
 
         int destValue = getReg(dest);
@@ -174,7 +174,7 @@ public final class CPU {
                 maskedResult = mask32(rawResult);
                 updateFlags(rawResult, maskedResult, "SUB", destValue, operand);
             }
-            default -> throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "unsupported ALU op: " + op);
+            default -> throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "unsupported ALU op: " + op);
         }
     }
 
@@ -226,7 +226,7 @@ public final class CPU {
             case REG_REG -> setReg(dest, getReg(src));
             case REG_IMM -> setReg(dest, src);
             case REG_MEM -> setReg(dest, memory.read(src));
-            default -> throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "unsupported MOV mode");
+            default -> throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "unsupported MOV mode");
         }
     }
 
@@ -254,7 +254,7 @@ public final class CPU {
 
     public void switchToProtected() {
         if (state.mode() != CPUData.CpuMode.REAL) {
-            throw new MyIBMGameException(ErrorCode.CPU_MODE_ERROR, "CPU is not in real mode");
+            throw new UnclesPCException(ErrorCode.CPU_MODE_ERROR, "CPU is not in real mode");
         }
 
         setMode(CPUData.CpuMode.PROTECTED_USER);
@@ -263,7 +263,7 @@ public final class CPU {
 
     public void switchToProtectedKernel() {
         if (state.mode() != CPUData.CpuMode.REAL) {
-            throw new MyIBMGameException(ErrorCode.CPU_MODE_ERROR, "CPU is not in real mode");
+            throw new UnclesPCException(ErrorCode.CPU_MODE_ERROR, "CPU is not in real mode");
         }
 
         setMode(CPUData.CpuMode.PROTECTED_KERNEL);
@@ -293,7 +293,7 @@ public final class CPU {
 
         if (state.mode() == CPUData.CpuMode.PROTECTED_USER
             && (currentPc < MemoryMap.USER_START.value() || currentPc > MemoryMap.USER_END.value())) {
-            throw new MyIBMGameException(ErrorCode.CPU_MODE_ERROR, "PC is outside user space");
+            throw new UnclesPCException(ErrorCode.CPU_MODE_ERROR, "PC is outside user space");
         }
 
         int[] instruction = {
@@ -309,12 +309,12 @@ public final class CPU {
 
     public Instruction decode(int[] instruction) {
         if (instruction == null || instruction.length != 4) {
-            throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "instruction must contain four bytes");
+            throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "instruction must contain four bytes");
         }
 
         int opcode = instruction[0] & 0xFF;
         if (!opcodeTable.containsKey(opcode)) {
-            throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "unknown opcode: " + opcode);
+            throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "unknown opcode: " + opcode);
         }
 
         CPUData.InstMode mode = CPUData.InstMode.fromCode(instruction[1] & 0xFF);
@@ -324,7 +324,7 @@ public final class CPU {
     public void execute(Instruction instruction) {
         OpcodeDescriptor descriptor = opcodeTable.get(instruction.opcode());
         if (descriptor == null) {
-            throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "opcode is not registered");
+            throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "opcode is not registered");
         }
 
         switch (descriptor.handler()) {
@@ -353,7 +353,7 @@ public final class CPU {
             case "trigger_interrupt" -> triggerInterrupt(null);
             case "execute_pushy" -> executePushy();
             case "execute_popy" -> executePopy();
-            default -> throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "unknown handler: " + descriptor.handler());
+            default -> throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "unknown handler: " + descriptor.handler());
         }
     }
 
@@ -385,7 +385,7 @@ public final class CPU {
     }
 
     private void divZero() {
-        throw new MyIBMGameException(ErrorCode.DIVISION_BY_ZERO, "division by zero");
+        throw new UnclesPCException(ErrorCode.DIVISION_BY_ZERO, "division by zero");
     }
 
     private int resolveBinaryOperand(CPUData.InstMode mode, int src) {
@@ -393,7 +393,7 @@ public final class CPU {
             case REG_REG -> getReg(src);
             case REG_IMM -> src;
             case REG_MEM -> memory.read(src);
-            case NONE -> throw new MyIBMGameException(ErrorCode.INVALID_INSTRUCTION, "instruction mode NONE is invalid here");
+            case NONE -> throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "instruction mode NONE is invalid here");
         };
     }
 
@@ -424,7 +424,7 @@ public final class CPU {
 
     private void requireKernel() {
         if (state.mode() == CPUData.CpuMode.PROTECTED_USER) {
-            throw new MyIBMGameException(ErrorCode.CPU_MODE_ERROR, "operation requires kernel privileges");
+            throw new UnclesPCException(ErrorCode.CPU_MODE_ERROR, "operation requires kernel privileges");
         }
     }
 
@@ -457,17 +457,17 @@ public final class CPU {
         switch (state.mode()) {
             case PROTECTED_USER -> {
                 if (address < MemoryMap.USER_START.value() || address > MemoryMap.USER_END.value()) {
-                    throw new MyIBMGameException(ErrorCode.CPU_MODE_ERROR, "jump target is outside user space");
+                    throw new UnclesPCException(ErrorCode.CPU_MODE_ERROR, "jump target is outside user space");
                 }
             }
             case PROTECTED_KERNEL -> {
                 if (address < MemoryMap.KERNEL_START.value() || address > MemoryMap.KERNEL_END.value()) {
-                    throw new MyIBMGameException(ErrorCode.CPU_MODE_ERROR, "jump target is outside kernel space");
+                    throw new UnclesPCException(ErrorCode.CPU_MODE_ERROR, "jump target is outside kernel space");
                 }
             }
             case REAL -> {
                 if (address < MemoryMap.BOOTLOADER_START.value() || address > MemoryMap.BOOTLOADER_END.value()) {
-                    throw new MyIBMGameException(ErrorCode.CPU_MODE_ERROR, "jump target is outside bootloader space");
+                    throw new UnclesPCException(ErrorCode.CPU_MODE_ERROR, "jump target is outside bootloader space");
                 }
             }
         }

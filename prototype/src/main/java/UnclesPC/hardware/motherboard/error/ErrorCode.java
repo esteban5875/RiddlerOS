@@ -13,7 +13,8 @@ public enum ErrorCode {
     SECTOR_SIZE_ERROR(0x09),
     OCCUPIED_DISK_ERROR(0x0A),
     INVALID_DISK_COMMAND(0x0B),
-    SECTOR_COUNT_ERROR(0x0C);
+    SECTOR_COUNT_ERROR(0x0C),
+    DISK_TIMEOUT(0x0D);
 
     private final int code;
 

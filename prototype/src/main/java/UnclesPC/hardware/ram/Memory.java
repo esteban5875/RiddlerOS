@@ -3,8 +3,8 @@ package UnclesPC.hardware.ram;
 import java.util.HashMap;
 import java.util.Map;
 
+import UnclesPC.exception.UnclesPCException;
 import UnclesPC.hardware.motherboard.error.ErrorCode;
-import UnclesPC.hardware.motherboard.error.MyIBMGameException;
 import UnclesPC.hardware.ram.modules.MemoryMap;
 
 public final class Memory {
@@ -28,7 +28,7 @@ public final class Memory {
 
     public int pushWord(int value, int sp) {
         if (sp - 4 < MemoryMap.STACK_BOTTOM.value()) {
-            throw new MyIBMGameException(ErrorCode.STACK_UNDERFLOW, "stack underflow");
+            throw new UnclesPCException(ErrorCode.STACK_UNDERFLOW, "stack underflow");
         }
 
         int newSp = sp - 4;
@@ -40,7 +40,7 @@ public final class Memory {
 
     public PopResult popWord(int sp) {
         if (sp + 4 > MemoryMap.STACK_TOP.value()) {
-            throw new MyIBMGameException(ErrorCode.STACK_OVERFLOW, "stack overflow");
+            throw new UnclesPCException(ErrorCode.STACK_OVERFLOW, "stack overflow");
         }
 
         int value = 0;
@@ -83,7 +83,7 @@ public final class Memory {
 
     private void validateAddress(int address) {
         if (address < 0 || address >= size) {
-            throw new MyIBMGameException(
+            throw new UnclesPCException(
                 ErrorCode.MEMORY_OUT_OF_BOUNDS,
                 "memory address out of bounds: " + address
             );

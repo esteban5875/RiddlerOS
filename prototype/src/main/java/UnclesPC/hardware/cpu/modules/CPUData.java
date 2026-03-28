@@ -3,8 +3,8 @@ package UnclesPC.hardware.cpu.modules;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import UnclesPC.exception.UnclesPCException;
 import UnclesPC.hardware.motherboard.error.ErrorCode;
-import UnclesPC.hardware.motherboard.error.MyIBMGameException;
 
 public final class CPUData {
     public static final int ADDR_MASK = 0x7FFFFF;
@@ -79,7 +79,7 @@ public final class CPUData {
                     return mode;
                 }
             }
-            throw new MyIBMGameException(
+            throw new UnclesPCException(
                 ErrorCode.INVALID_INSTRUCTION,
                 "unknown instruction mode: " + code
             );

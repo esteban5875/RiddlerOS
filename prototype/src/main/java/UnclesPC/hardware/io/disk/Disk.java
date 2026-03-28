@@ -8,9 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import UnclesPC.hardware.motherboard.error.ErrorCode;
-import UnclesPC.hardware.motherboard.error.MyIBMGameException;
 import UnclesPC.hardware.ram.Memory;
-import UnclesPC.hardware.io.disk.DiskRegisters;
+import UnclesPC.exception.UnclesPCException;
 import UnclesPC.hardware.io.exception.VirtualHardwareException;
 import UnclesPC.hardware.ram.modules.MemoryMap;
 
@@ -63,7 +62,7 @@ public final class Disk implements AutoCloseable {
 
     public void create(boolean overwrite) throws IOException {
         if (exists() && !overwrite) {
-            throw new MyIBMGameException(ErrorCode.DISK_IMAGE_ERROR, "disk image already exists");
+            throw new UnclesPCException(ErrorCode.DISK_IMAGE_ERROR, "disk image already exists");
         }
 
         Path parent = imagePath.getParent();
@@ -83,7 +82,7 @@ public final class Disk implements AutoCloseable {
 
         if (!exists()) {
             if (!create) {
-                throw new MyIBMGameException(ErrorCode.DISK_NOT_FOUND, "disk image not found");
+                throw new UnclesPCException(ErrorCode.DISK_NOT_FOUND, "disk image not found");
             }
             create(false);
         }
@@ -118,7 +117,7 @@ public final class Disk implements AutoCloseable {
 
     private RandomAccessFile requireOpen() {
         if (!isOpen()) {
-            throw new MyIBMGameException(ErrorCode.DISK_NOT_FOUND, "disk image is not open");
+            throw new UnclesPCException(ErrorCode.DISK_NOT_FOUND, "disk image is not open");
         }
         return file;
     }
@@ -140,38 +139,31 @@ public final class Disk implements AutoCloseable {
     }
 
     public void executeCMD() {
-        boolean isOccupied = memory.read(DiskRegisters.STATUS.address) == 0x01 ? true : false;
+        long startTime = System.currentTimeMillis();
+        long timeoutMillis = 5000;
 
-        if (isOccupied) {
-           
-
+        while (memory.read(DiskRegisters.STATUS.address) == 0x01) {
+            if (System.currentTimeMillis() - startTime > timeoutMillis) {
+                memory.write(DiskRegisters.ERROR.address, ErrorCode.DISK_TIMEOUT.code());
+                return;
+            }
+            Thread.onSpinWait();
         }
-        
+
         memory.write(DiskRegisters.STATUS.address, 0x01);
 
         try {
             int command = memory.read(DiskRegisters.COMMAND.address);
             switch (command) {
-                case 0x01:
-                    this.read();
-                    break;
-                case 0x02:
-                    this.write();
-                    break;
-                case 0x03:
-                    this.format();
-                    break;
-                default:
-                    throw new VirtualHardwareException(ErrorCode.INVALID_DISK_COMMAND.code());
+                case 0x01 -> this.read();
+                case 0x02 -> this.write();
+                case 0x03 -> this.format();
+                default   -> throw new VirtualHardwareException(ErrorCode.INVALID_DISK_COMMAND.code());
             }
-        } 
-        
-        catch (VirtualHardwareException e) {
-            if (e.getErrorCode() == ErrorCode.INVALID_DISK_COMMAND.code()){
-                memory.write(DiskRegisters.ERROR.address, ErrorCode.INVALID_DISK_COMMAND.code());
-            }
-
-
+        } catch (VirtualHardwareException e) {
+            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
+        } finally {
+            memory.write(DiskRegisters.STATUS.address, 0x00);
         }
     }
 
@@ -217,7 +209,7 @@ public final class Disk implements AutoCloseable {
 
         }
         catch (IOException e) {
-            throw new MyIBMGameException(ErrorCode.DISK_IMAGE_ERROR, "unable to read disk image");
+            throw new UnclesPCException(ErrorCode.DISK_IMAGE_ERROR, "unable to read disk image");
         }
         catch (VirtualHardwareException e) {
             memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
@@ -263,7 +255,7 @@ public final class Disk implements AutoCloseable {
             }
         }
         catch (IOException e) {
-            throw new MyIBMGameException(ErrorCode.DISK_IMAGE_ERROR, "unable to write disk image");
+            throw new UnclesPCException(ErrorCode.DISK_IMAGE_ERROR, "unable to write disk image");
         }
         catch (VirtualHardwareException e) {
             memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
@@ -293,7 +285,7 @@ public final class Disk implements AutoCloseable {
             }
         }
         catch (IOException e) {
-            throw new MyIBMGameException(ErrorCode.DISK_IMAGE_ERROR, "unable to format disk image");
+            throw new UnclesPCException(ErrorCode.DISK_IMAGE_ERROR, "unable to format disk image");
         }
         catch (VirtualHardwareException e) {
             memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
