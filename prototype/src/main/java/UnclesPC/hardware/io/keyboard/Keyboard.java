@@ -4,17 +4,27 @@ import UnclesPC.hardware.motherboard.error.ErrorCode;
 import UnclesPC.hardware.ram.Memory;
 
 public final class Keyboard {
-    private final int status;
-    private int writePtr;
-    private int readPtr;
+    private final int statusLoc;
+    private int writePtrLoc;
+    private int readPtrLoc;
     private final Memory memory;
 
     public Keyboard(Memory memory) {
         this.memory = memory;
-        this.status = KeyboardMap.STATUS.value();
-        this.writePtr = KeyboardMap.FIFO_START.value();
-        this.readPtr = KeyboardMap.FIFO_START.value();
+        this.statusLoc = KeyboardMap.STATUS.value();
+        this.writePtrLoc = KeyboardMap.FIFO_START.value();
+        this.readPtrLoc = KeyboardMap.FIFO_START.value();
     }
 
-    //TODO: Execute MMIO.
+    public void pressKey(int keyCode) {
+        int nextWritePtr = writePtrLoc + 4;
+        
+        if (nextWritePtr > KeyboardMap.FIFO_END.value()) {
+            nextWritePtr = KeyboardMap.FIFO_START.value();
+        }
+        
+        memory.write(writePtrLoc, keyCode);
+        writePtrLoc = nextWritePtr;
+        memory.write(statusLoc, 0); // Buffer not full
+    }
 }
