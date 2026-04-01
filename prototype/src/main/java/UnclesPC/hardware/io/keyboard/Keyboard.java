@@ -39,20 +39,20 @@ public final class Keyboard {
     public ErrorCode pressKey(int keyCode) {
         deviceLock.lock();
         try {
-            memory.write(statusLoc, STATUS_OCCUPIED);
+            memory.writeWord(statusLoc, STATUS_OCCUPIED);
 
             if (queuedKeyCount == fifoCapacity) {
                 return ErrorCode.KEYBOARD_BUFFER_FULL;
             }
 
-            memory.write(writePtrLoc, keyCode);
+            memory.writeWord(writePtrLoc, keyCode);
             writePtrLoc = advancePointer(writePtrLoc);
             queuedKeyCount++;
 
-            memory.write(KeyboardMap.CURRENT_KEY.value(), keyCode);
+            memory.writeWord(KeyboardMap.CURRENT_KEY.value(), keyCode);
             return ErrorCode.SUCCESS;
         } finally {
-            memory.write(statusLoc, STATUS_IDLE);
+            memory.writeWord(statusLoc, STATUS_IDLE);
             deviceLock.unlock();
         }
     }
@@ -60,29 +60,29 @@ public final class Keyboard {
     public OptionalInt readKey() {
         deviceLock.lock();
         try {
-            memory.write(statusLoc, STATUS_OCCUPIED);
+            memory.writeWord(statusLoc, STATUS_OCCUPIED);
 
             if (queuedKeyCount == 0) {
                 return OptionalInt.empty();
             }
 
-            int keyCode = memory.read(readPtrLoc);
-            memory.write(readPtrLoc, 0);
+            int keyCode = memory.readWord(readPtrLoc);
+            memory.writeWord(readPtrLoc, 0);
             readPtrLoc = advancePointer(readPtrLoc);
             queuedKeyCount--;
             return OptionalInt.of(keyCode);
         } finally {
-            memory.write(statusLoc, STATUS_IDLE);
+            memory.writeWord(statusLoc, STATUS_IDLE);
             deviceLock.unlock();
         }
     }
 
     private void initializeDeviceState() {
-        memory.write(statusLoc, STATUS_IDLE);
-        memory.write(KeyboardMap.CURRENT_KEY.value(), 0);
+        memory.writeWord(statusLoc, STATUS_IDLE);
+        memory.writeWord(KeyboardMap.CURRENT_KEY.value(), 0);
 
         for (int slot = fifoStartLoc; slot < fifoEndLoc; slot += FIFO_STRIDE_BYTES) {
-            memory.write(slot, 0);
+            memory.writeWord(slot, 0);
         }
     }
 

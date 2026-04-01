@@ -22,27 +22,27 @@ public final class SoundCard {
         this.volumeLoc = SoundMap.VOLUME.value();
         this.errorLoc = SoundMap.ERROR.value();
 
-        memory.write(statusLoc, STATUS_FREE);
-        memory.write(frequencyLoc, 0);
-        memory.write(durationLoc, 0);
-        memory.write(volumeLoc, 0xFF);
-        memory.write(errorLoc, ErrorCode.SUCCESS.code());
+        memory.writeWord(statusLoc, STATUS_FREE);
+        memory.writeWord(frequencyLoc, 0);
+        memory.writeWord(durationLoc, 0);
+        memory.writeWord(volumeLoc, 0xFF);
+        memory.writeWord(errorLoc, ErrorCode.SUCCESS.code());
     }
 
     public int[] beep() {
         ErrorCode errorCode = ErrorCode.SUCCESS;
 
-        if (memory.read(statusLoc) == STATUS_OCCUPIED) {
-            memory.write(errorLoc, ErrorCode.SOUND_CARD_OCCUPIED.code());
+        if (memory.readWord(statusLoc) == STATUS_OCCUPIED) {
+            memory.writeWord(errorLoc, ErrorCode.SOUND_CARD_OCCUPIED.code());
             return null;
         }
 
         try {
-            memory.write(statusLoc, STATUS_OCCUPIED);
+            memory.writeWord(statusLoc, STATUS_OCCUPIED);
 
-            final int frequency = memory.read(frequencyLoc);
-            final int durationMs = memory.read(durationLoc);
-            final int volume = memory.read(volumeLoc);
+            final int frequency = memory.readWord(frequencyLoc);
+            final int durationMs = memory.readWord(durationLoc);
+            final int volume = memory.readWord(volumeLoc);
 
             if (frequency < 20 || frequency > 20_000) {
                 errorCode = ErrorCode.INVALID_SOUND_FREQUENCY;
@@ -61,20 +61,20 @@ public final class SoundCard {
 
             return new int[] { frequency, durationMs, volume };
         } finally {
-            memory.write(errorLoc, errorCode.code());
-            memory.write(statusLoc, STATUS_FREE);
+            memory.writeWord(errorLoc, errorCode.code());
+            memory.writeWord(statusLoc, STATUS_FREE);
         }
     }
 
     public void setFrequency(int frequency) {
-        memory.write(frequencyLoc, frequency);
+        memory.writeWord(frequencyLoc, frequency);
     }
 
     public void setDuration(int duration) {
-        memory.write(durationLoc, duration);
+        memory.writeWord(durationLoc, duration);
     }
 
     public void setVolume(int volume) {
-        memory.write(volumeLoc, volume);
+        memory.writeWord(volumeLoc, volume);
     }
 }

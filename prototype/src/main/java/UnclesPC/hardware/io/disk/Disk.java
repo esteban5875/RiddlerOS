@@ -1,5 +1,8 @@
 package UnclesPC.hardware.io.disk;
 
+// TODO: Refactor disk to assume .img file is pre-created and always exists. This will simplify and modularize the code.
+
+
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
@@ -24,8 +27,11 @@ public final class Disk implements AutoCloseable {
     private final Memory memory;
 
     public Disk() {
+        this(new Memory());
+    }
 
-        this.memory = new Memory();
+    public Disk(Memory memory) {
+        this.memory = memory;
         this.imagePath = Path.of("disk", "img", "disk.img");
     }
 
@@ -142,18 +148,18 @@ public final class Disk implements AutoCloseable {
         long startTime = System.currentTimeMillis();
         long timeoutMillis = 5000;
 
-        while (memory.read(DiskRegisters.STATUS.address) == 0x01) {
+        while (memory.readWord(DiskRegisters.STATUS.address) == 0x01) {
             if (System.currentTimeMillis() - startTime > timeoutMillis) {
-                memory.write(DiskRegisters.ERROR.address, ErrorCode.DISK_TIMEOUT.code());
+                memory.writeWord(DiskRegisters.ERROR.address, ErrorCode.DISK_TIMEOUT.code());
                 return;
             }
             Thread.onSpinWait();
         }
 
-        memory.write(DiskRegisters.STATUS.address, 0x01);
+        memory.writeWord(DiskRegisters.STATUS.address, 0x01);
 
         try {
-            int command = memory.read(DiskRegisters.COMMAND.address);
+            int command = memory.readWord(DiskRegisters.COMMAND.address);
             switch (command) {
                 case 0x01 -> this.read();
                 case 0x02 -> this.write();
@@ -161,17 +167,17 @@ public final class Disk implements AutoCloseable {
                 default   -> throw new VirtualHardwareException(ErrorCode.INVALID_DISK_COMMAND.code());
             }
         } catch (VirtualHardwareException e) {
-            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
+            memory.writeWord(DiskRegisters.ERROR.address, e.getErrorCode());
         } finally {
-            memory.write(DiskRegisters.STATUS.address, 0x00);
+            memory.writeWord(DiskRegisters.STATUS.address, 0x00);
         }
     }
 
     private void read() {
         try {
-            int sectorCount = memory.read(DiskRegisters.SECTOR_COUNT.address);
-            int lba = memory.read(DiskRegisters.LBA.address);
-            int bufferPtr = memory.read(DiskRegisters.BUFFER_PTR.address);
+            int sectorCount = memory.readWord(DiskRegisters.SECTOR_COUNT.address);
+            int lba = memory.readWord(DiskRegisters.LBA.address);
+            int bufferPtr = memory.readWord(DiskRegisters.BUFFER_PTR.address);
 
             if (sectorCount > MAX_SECTOR_READ) {
                 throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
@@ -203,7 +209,7 @@ public final class Disk implements AutoCloseable {
 
                 for (int byteIndex = 0; byteIndex < SECTOR_SIZE; byteIndex++) {
                     int value = diskFile.read();
-                    memory.write(memoryOffset + byteIndex, value < 0 ? 0 : value);
+                    memory.writeByte(memoryOffset + byteIndex, value < 0 ? 0 : value);
                 }
             }
 
@@ -212,15 +218,15 @@ public final class Disk implements AutoCloseable {
             throw new UnclesPCException(ErrorCode.DISK_IMAGE_ERROR, "unable to read disk image");
         }
         catch (VirtualHardwareException e) {
-            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
+            memory.writeWord(DiskRegisters.ERROR.address, e.getErrorCode());
         }
     }   
 
     private void write() {
         try {
-            int sectorCount = memory.read(DiskRegisters.SECTOR_COUNT.address);
-            int lba = memory.read(DiskRegisters.LBA.address);
-            int bufferPtr = memory.read(DiskRegisters.BUFFER_PTR.address);
+            int sectorCount = memory.readWord(DiskRegisters.SECTOR_COUNT.address);
+            int lba = memory.readWord(DiskRegisters.LBA.address);
+            int bufferPtr = memory.readWord(DiskRegisters.BUFFER_PTR.address);
 
             if (sectorCount > MAX_SECTOR_READ) {
                 throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
@@ -250,7 +256,7 @@ public final class Disk implements AutoCloseable {
                 diskFile.seek(sectorOffset);
 
                 for (int byteIndex = 0; byteIndex < SECTOR_SIZE; byteIndex++) {
-                    diskFile.write(memory.read(memoryOffset + byteIndex));
+                    diskFile.write(memory.readByte(memoryOffset + byteIndex));
                 }
             }
         }
@@ -258,14 +264,14 @@ public final class Disk implements AutoCloseable {
             throw new UnclesPCException(ErrorCode.DISK_IMAGE_ERROR, "unable to write disk image");
         }
         catch (VirtualHardwareException e) {
-            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
+            memory.writeWord(DiskRegisters.ERROR.address, e.getErrorCode());
         }
     }
 
     private void format() {
         try {
-            int sectorCount = memory.read(DiskRegisters.SECTOR_COUNT.address);
-            int lba = memory.read(DiskRegisters.LBA.address);
+            int sectorCount = memory.readWord(DiskRegisters.SECTOR_COUNT.address);
+            int lba = memory.readWord(DiskRegisters.LBA.address);
 
             if (sectorCount > MAX_SECTOR_READ) {
                 throw new VirtualHardwareException(ErrorCode.SECTOR_COUNT_ERROR.code());
@@ -288,7 +294,7 @@ public final class Disk implements AutoCloseable {
             throw new UnclesPCException(ErrorCode.DISK_IMAGE_ERROR, "unable to format disk image");
         }
         catch (VirtualHardwareException e) {
-            memory.write(DiskRegisters.ERROR.address, e.getErrorCode());
+            memory.writeWord(DiskRegisters.ERROR.address, e.getErrorCode());
         }
     }
 }

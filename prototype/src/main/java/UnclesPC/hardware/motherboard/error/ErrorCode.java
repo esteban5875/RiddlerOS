@@ -26,7 +26,7 @@ public enum ErrorCode {
     private final int code;
 
     ErrorCode(int code) {
-        this.code = code;
+        this.code = code & 0xFFFFFFFF; // Ensure code is treated as 32-bit unsigned
     }
 
     public int code() {

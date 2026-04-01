@@ -13,6 +13,6 @@ enum DiskRegisters {
     public final int address;
 
     DiskRegisters(int address) {
-        this.address = address;
+        this.address = address & 0xFFFFFFFF; // Ensure address is treated as 32-bit unsigned
     }
 }

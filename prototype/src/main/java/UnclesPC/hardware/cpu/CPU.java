@@ -22,10 +22,15 @@ public final class CPU {
     private boolean halted;
 
     public CPU() {
-        this.memory = new Memory();
+        this(new Memory());
+    }
+
+    public CPU(Memory memory) {
+        this.memory = memory;
         this.state = new CPUState();
         this.opcodeTable = OpcodeTable.OPCODE_TABLE;
         this.halted = false;
+        syncStackPointerFromMemory();
     }
 
     public Memory memory() {
@@ -67,6 +72,7 @@ public final class CPU {
 
     public int sp() {
         requireKernel();
+        syncStackPointerFromMemory();
         return state.sp();
     }
 
@@ -195,13 +201,14 @@ public final class CPU {
     }
 
     public void executePushy() {
-        setSp(memory.pushWord(y(), sp()));
+        memory.pushWord(y());
+        syncStackPointerFromMemory();
     }
 
     public void executePopy() {
-        Memory.PopResult result = memory.popWord(sp());
-        setSp(result.newSp());
-        setY(result.value());
+        int value = memory.popWord();
+        syncStackPointerFromMemory();
+        setY(value);
     }
 
     public void triggerInterrupt(Integer interruptNumber) {
@@ -213,42 +220,45 @@ public final class CPU {
         }
 
         int handler = memory.getVector(actualInterrupt);
-        setSp(memory.pushWord(pc(), sp()));
+        memory.pushWord(pc());
+        syncStackPointerFromMemory();
         executeJump(handler);
     }
 
     public void executeSTX(int address) {
-        memory.write(address, x());
+        memory.writeByte(address, x());
     }
 
     public void executeMOV(CPUData.InstMode mode, int dest, int src) {
         switch (mode) {
             case REG_REG -> setReg(dest, getReg(src));
             case REG_IMM -> setReg(dest, src);
-            case REG_MEM -> setReg(dest, memory.read(src));
+            case REG_MEM -> setReg(dest, memory.readByte(src));
             default -> throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "unsupported MOV mode");
         }
     }
 
     public void executeCall(int address) {
-        setSp(memory.pushWord(pc(), sp()));
+        memory.pushWord(pc());
+        syncStackPointerFromMemory();
         executeJump(address);
     }
 
     public void executeRet() {
-        Memory.PopResult result = memory.popWord(sp());
-        setSp(result.newSp());
-        executeJump(result.value());
+        int value = memory.popWord();
+        syncStackPointerFromMemory();
+        executeJump(value);
     }
 
     public void reset() {
         setMode(CPUData.CpuMode.REAL);
         setPc(MemoryMap.BOOTLOADER_START.value());
-        setSp(MemoryMap.STACK_TOP.value());
+        memory.resetStackPointer();
+        syncStackPointerFromMemory();
         halted = false;
 
         for (int address = MemoryMap.VECTOR_TABLE_START.value(); address <= MemoryMap.VECTOR_TABLE_END.value(); address++) {
-            memory.write(address, 0);
+            memory.writeByte(address, 0);
         }
     }
 
@@ -271,6 +281,7 @@ public final class CPU {
     }
 
     public Map<String, Object> snapshot() {
+        syncStackPointerFromMemory();
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("PC", state.pc());
         snapshot.put("SP", state.sp());
@@ -297,10 +308,10 @@ public final class CPU {
         }
 
         int[] instruction = {
-            memory.read(currentPc),
-            memory.read(currentPc + 1),
-            memory.read(currentPc + 2),
-            memory.read(currentPc + 3)
+            memory.readByte(currentPc),
+            memory.readByte(currentPc + 1),
+            memory.readByte(currentPc + 2),
+            memory.readByte(currentPc + 3)
         };
 
         setPc(currentPc + 4);
@@ -392,7 +403,7 @@ public final class CPU {
         return switch (mode) {
             case REG_REG -> getReg(src);
             case REG_IMM -> src;
-            case REG_MEM -> memory.read(src);
+            case REG_MEM -> memory.readByte(src);
             case NONE -> throw new UnclesPCException(ErrorCode.INVALID_INSTRUCTION, "instruction mode NONE is invalid here");
         };
     }
@@ -401,7 +412,7 @@ public final class CPU {
         return switch (mode) {
             case REG_REG -> getReg(operand);
             case REG_IMM -> operand;
-            case REG_MEM -> memory.read(operand);
+            case REG_MEM -> memory.readByte(operand);
             case NONE -> operand;
         };
     }
@@ -450,7 +461,12 @@ public final class CPU {
 
     private void setSp(int value) {
         requireKernel();
-        state.setSp(value & CPUData.ADDR_MASK);
+        memory.setStackPointer(value);
+        syncStackPointerFromMemory();
+    }
+
+    private void syncStackPointerFromMemory() {
+        state.setSp(memory.stackPointer());
     }
 
     private void validateExecutionTarget(int address) {
