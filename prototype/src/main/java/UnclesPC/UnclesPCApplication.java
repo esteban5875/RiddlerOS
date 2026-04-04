@@ -45,8 +45,8 @@ public final class UnclesPCApplication {
             Motherboard motherboard = new Motherboard(diskImgManager.requireOpen());
             motherboard.reset(loadFirmware());
             System.out.println("'Uncle's PC' Java prototype ready.");
-            
-            motherboard.debug_tick();
+
+            //motherboard.debug_tick();
         }
     }
 
