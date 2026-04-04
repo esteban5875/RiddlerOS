@@ -1,3 +1,4 @@
 .maven/
 bin/
+disk/img/*.img
 target/

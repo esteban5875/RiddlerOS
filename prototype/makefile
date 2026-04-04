@@ -7,7 +7,7 @@ MAVEN_ROOT := .maven
 MAVEN_HOME := $(MAVEN_ROOT)/apache-maven-$(MAVEN_VERSION)
 MVN := $(MAVEN_HOME)/bin/mvn
 JAVA := java
-MAIN_CLASS := myibmgame.MyIBMGameApplication
+MAIN_CLASS := UnclesPC.UnclesPCApplication
 
 .PHONY: env compile run clean distclean
 
