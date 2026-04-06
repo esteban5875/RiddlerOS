@@ -519,6 +519,15 @@ public final class Parser {
             throw lineError(statement.line(), "unknown statement kind: " + statement.kind());
         }
 
+        if (imageBase == null) {
+            imageBase = currentAddress;
+        }
+
+        int offset = currentAddress - imageBase;
+        if (offset > output.size()) {
+            output.writeBytes(new byte[offset - output.size()]);
+        }
+
         return output.toByteArray();
     }
 

@@ -15,6 +15,10 @@ public final class UnclesPCApplication {
         "src", "main", "java", "UnclesPC", "virtual_hardware", "motherboard", "firmware"
     );
 
+    private static final Path TEST_DIR = Path.of(
+        "src", "main", "java", "UnclesPC", "tests", "bin"
+    );
+
     private static final Map<String, Integer> FIRMWARE_IMAGES = Map.ofEntries(
         Map.entry("bootstrap.bin", 0x00000600),
         Map.entry("vector_divide_by_zero.bin", 0x00000800),
@@ -29,28 +33,32 @@ public final class UnclesPCApplication {
         Map.entry("vector_bios_mem.bin", 0x00000A00)
     );
 
-    private UnclesPCApplication() {
-    }
-
     public static void main(String[] args) throws IOException, VirtualHardwareException {
         // compileFirmware();
 
-        try (DiskImgManager diskImgManager = new DiskImgManager()) {
-            if (diskImgManager.exists()) {
-                diskImgManager.open();
-            } else {
-                diskImgManager.create(false);
-            }
+        DiskImgManager diskImgManager = new DiskImgManager();
 
-            Motherboard motherboard = new Motherboard(diskImgManager.requireOpen());
-            motherboard.reset(loadFirmware());
-            System.out.println("'Uncle's PC' Java prototype ready.");
+        if (diskImgManager.exists()) {
+            diskImgManager.open();
+        } else {
+            diskImgManager.create(false);
+        }
 
-            //motherboard.debug_tick();
+        Motherboard motherboard = new Motherboard(diskImgManager.requireOpen());
+
+        try {
+            loadFirmware();
+            motherboard.loadProgram(readBinFile(TEST_DIR, "bootloader.bin"));;
+            System.out.println("'Uncle's PC' Java prototype ready. \n");
+
+            motherboard.debug_tick();
+        } catch (VirtualHardwareException e) {
+            System.err.println("\n" + "Virtual hardware exception: " + e.getMessage() + " (code " + e.errorCode().code() + ")");
+        } finally {
+            diskImgManager.close();
         }
     }
 
-   
     //Func to bootstrap firmware. Should be run whenever firmware source code is changed. Commented out to avoid accidental execution.
 
     /* private static void compileFirmware() throws IOException {
@@ -97,13 +105,17 @@ public final class UnclesPCApplication {
         );
     } */
 
+    private static byte[] readBinFile(Path directory, String fileName) throws IOException {
+        return Assembler.toBytes(directory.resolve(fileName));
+    }
+
     private static byte[] loadFirmware() throws IOException {
         int firmwareStart = MemoryMap.FIRMWARE_START.value();
         int firmwareSize = MemoryMap.FIRMWARE_END.value() - firmwareStart + 1;
         byte[] firmware = new byte[firmwareSize];
 
         for (Map.Entry<String, Integer> image : FIRMWARE_IMAGES.entrySet()) {
-            byte[] bytes = Assembler.toBytes(FIRMWARE_DIR.resolve(image.getKey()));
+            byte[] bytes = readBinFile(FIRMWARE_DIR, image.getKey());
             int offset = image.getValue() - firmwareStart;
 
             if (offset < 0 || offset + bytes.length > firmware.length) {
@@ -116,5 +128,4 @@ public final class UnclesPCApplication {
         return firmware;
     }
 
-    
 }

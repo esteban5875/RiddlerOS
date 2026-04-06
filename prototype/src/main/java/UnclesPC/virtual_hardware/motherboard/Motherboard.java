@@ -62,15 +62,43 @@ public final class Motherboard {
         return soundCard;
     }
 
-    public void reset() {
-        reset(new byte[0]);
+    private void clearRegion(int start, int end) {
+        for (int addr = start; addr <= end; addr++) {
+            try {
+                memory.writeByte(addr, 0);
+            } catch (VirtualHardwareException e) {
+                throw new UnclesPCException(ErrorCode.MEMORY_OUT_OF_BOUNDS, "unable to clear memory region", e);
+            }
+        }
     }
 
-    public void reset(byte[] firmware) {
-        Objects.requireNonNull(firmware, "firmware");
-
+    public void reset(byte[] firmware, byte[] bootloader) {
         cpu.reset();
-        loadFirmware(firmware);
+        clearRegion(MemoryMap.BOOTLOADER_START.value(), MemoryMap.BOOTLOADER_END.value());
+        clearRegion(MemoryMap.FIRMWARE_START.value(), MemoryMap.FIRMWARE_END.value());
+        loadImage(firmware, MemoryMap.FIRMWARE_START.value(), MemoryMap.FIRMWARE_END.value(), "firmware");
+        loadImage(bootloader, MemoryMap.BOOTLOADER_START.value(), MemoryMap.BOOTLOADER_END.value(), "bootloader");
+    }
+
+    public void loadProgram(byte[] program) {
+        clearRegion(MemoryMap.PROGRAM_START.value(), MemoryMap.PROGRAM_END.value());
+        loadImage(program, MemoryMap.PROGRAM_START.value(), MemoryMap.PROGRAM_END.value(), "program");
+    }
+
+    private void loadImage(byte[] image, int start, int end, String name) {
+        int regionSize = end - start + 1;
+        
+        if (image.length > regionSize) {
+            throw new UnclesPCException(ErrorCode.MEMORY_OUT_OF_BOUNDS, name + " image does not fit");
+        }
+
+        for (int i = 0; i < image.length; i++) {
+            try {
+                memory.writeByte(start + i, image[i] & 0xFF);
+            } catch (VirtualHardwareException e) {
+                throw new UnclesPCException(ErrorCode.MEMORY_OUT_OF_BOUNDS, "unable to load " + name, e);
+            }
+        }
     }
 
     public TickResult tick() throws VirtualHardwareException {
@@ -82,15 +110,17 @@ public final class Motherboard {
     public TickResult debug_tick() throws VirtualHardwareException {
         TickResult result = tick();
 
-        while (!cpu.isHalted() && isFirmwarePc(cpu.pc())) {
+        while (!cpu.isHalted()) {
             result = tick();
+            debugSnapshot();
         }
 
-        System.out.println("CPU snapshot: " + cpu.snapshot());
-        System.out.println("MMIO snapshot: " + debug.snapshot(memory));
-        System.out.println("Tick result: " + result);
-
         return result;
+    }
+
+    public void debugSnapshot() {
+        System.out.println("CPU snapshot: " + cpu.snapshot() + "\n");
+        System.out.println("MMIO snapshot: " + debug.snapshot(memory) + "\n");
     }
 
     public void run() throws VirtualHardwareException {
@@ -131,10 +161,5 @@ public final class Motherboard {
                 );
             }
         }
-    }
-
-    private boolean isFirmwarePc(int address) {
-        return address >= MemoryMap.FIRMWARE_START.value()
-            && address <= MemoryMap.FIRMWARE_END.value();
     }
 }
